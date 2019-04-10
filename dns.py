@@ -1,7 +1,11 @@
 import socket
 
-PORT = 53
-ADDRESS = '127.0.0.1'
+PORT = 37000
+ADDRESS = ''
+
+DNS_PORT = 53
+DNS_ADDRESS = '8.8.8.8'
+
 SIZE = 512
 
 A = b'\x00\x01'
@@ -71,9 +75,21 @@ def create_response(request):
     print(header)
 
 
-sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-sock.bind((ADDRESS, PORT))
+request_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+request_sock.bind((ADDRESS, DNS_PORT))
+
+dns_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+dns_sock.bind((ADDRESS, PORT))
 
 while True:
-    data, address = sock.recvfrom(SIZE)
-    create_response(data)
+    print('\nWAITING FOR REQUEST')
+    data, address = request_sock.recvfrom(SIZE)
+    print('\nGOT REQUEST')
+    print(data)
+    dns_sock.sendto(data, (DNS_ADDRESS, DNS_PORT))
+    print('\nREDIRECTED')
+    answer, _ = dns_sock.recvfrom(SIZE)
+    print('\nGOT RESPONSE')
+    print(answer)
+    request_sock.sendto(answer, address)
+    print('\nRESPONSE SENT')
