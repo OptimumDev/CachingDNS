@@ -19,6 +19,15 @@ DATA = {
     NS: {}
 }
 
+TYPE_NAMES = {
+    A: 'A',
+    NS: 'NS'
+}
+
+
+def get_type_name(type):
+    return TYPE_NAMES[type] if type in TYPE_NAMES else type
+
 
 def read_bits(byte, count):
     return ''.join([str(ord(byte) & (1 << bit)) for bit in range(1, count + 1)])
@@ -80,7 +89,7 @@ def parse_answer_records_number(data):
     answers = int.from_bytes(data[6:8], BYTE_ORDER)
     authority = int.from_bytes(data[8:10], BYTE_ORDER)
     additional = int.from_bytes(data[10:12], BYTE_ORDER)
-    print ('answers', answers, authority, additional)
+    print ('records:', answers, authority, additional)
     return answers + authority + additional
 
 
@@ -95,6 +104,7 @@ def parse_answer_record(data, record_start):
     a = data[type_start:]
 
     if type not in DATA:
+        print('unknown type', get_type_name(type))
         return '', '', 0, '', 0
 
     ttl = int.from_bytes(data[ttl_start: data_length_start], BYTE_ORDER)
@@ -112,7 +122,7 @@ def parse_request(request):
     name, type_start = parse_name(request, 12)
     type = parse_type(request[type_start:])
     next_block_start = type_start + 4
-    print(name, 'type =', 'A' if type == A else 'NS' if type == NS else type)
+    print(name, 'type =', get_type_name(type))
     return id, name, type, next_block_start
 
 
@@ -132,10 +142,9 @@ def cache_response(response):
     for i in range(records_count):
         name, type, ttl, data, next_block_start = parse_answer_record(response, next_block_start)
         if type not in DATA:
-            print('unknown type', type)
             return
         add_record_to_cache(type, name, ttl, data)
-        print('CACHED', name, type, ttl, data)
+        print('CACHED', name, get_type_name(type), ttl, data)
 
 
 def process_known_request(request_sock, address, id, name, type):
@@ -151,7 +160,7 @@ def process_unknown_request(dns_sock, request_sock, request, address):
     print('\nGOT RESPONSE')
 
     cache_response(answer)
-    print('\nRESPONSE CACHED')
+    print('RESPONSE CACHED')
 
     request_sock.sendto(answer, address)
 
@@ -176,10 +185,10 @@ def run_dns():
             continue
 
         # if name in DATA[type]:
-        #     print('KNOWN')
+        #     print('CACHED')
         #     process_known_request(request_sock, address, id, name, type)
         # else:
-        print('UNKNOWN')
+        print('NOT CACHED')
         process_unknown_request(dns_sock, request_sock, request, address)
 
         print('\nRESPONSE SENT')
