@@ -291,13 +291,13 @@ def run_dns(base_ip):
         if have_cached_records(name, type):
             LOG('CACHED')
             process_known_request(request_sock, address, id, name, type, request)
+            LOG('\nRESPONSE SENT')
         elif base_ip is not None:
             LOG('NOT CACHED')
             process_unknown_request(dns_sock, base_ip, request_sock, request, address)
+            LOG('\nRESPONSE SENT')
         else:
             LOG('UNKNOWN REQUEST')
-
-        LOG('\nRESPONSE SENT')
 
 
 if __name__ == '__main__':
