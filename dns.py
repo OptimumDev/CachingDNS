@@ -3,9 +3,9 @@ import os
 import socket
 import time
 import threading
+import pickle
 
 BYTE_ORDER = 'big'
-
 
 PORT = 37000
 ADDRESS = ''
@@ -37,6 +37,10 @@ LOG = not_logging
 
 def get_type_name(type):
     return TYPE_NAMES[type] if type in TYPE_NAMES else type
+
+
+def parse_ip(ip_bytes):
+    return '.'.join([str(num) for num in ip_bytes])
 
 
 def read_bits(byte, count):
@@ -153,7 +157,7 @@ def encode_record(record, expire_time, type, name):
     rdata = record if type == A else encode_name(record)
     rdlength = len(rdata).to_bytes(2, BYTE_ORDER)
 
-    LOG('record:', name, get_type_name(type), time_left, len(rdata), record)
+    LOG('record:', name, get_type_name(type), time_left, len(rdata), record if type == NS else parse_ip(rdata))
     return encoded_name + type + cls + ttl + rdlength + rdata
 
 
@@ -210,6 +214,7 @@ def add_record_to_cache(type, name, ttl, data):
     if expire_time not in DATA[type][name]:
         DATA[type][name][expire_time] = []
     DATA[type][name][expire_time].append(data)
+    LOG('cached:', name, get_type_name(type), ttl, len(data), data if type == NS else parse_ip(data))
 
 
 def cache_response(response):
@@ -220,7 +225,6 @@ def cache_response(response):
         if type not in DATA:
             return
         add_record_to_cache(type, name, ttl, data)
-        LOG('cached:', name, get_type_name(type), ttl, len(data), data)
 
 
 def process_known_request(request_sock, address, id, name, type, request):
@@ -255,6 +259,16 @@ def have_cached_records(name, type):
     return len(not_expired_records) > 0
 
 
+def save_data(file_name):
+    with open(file_name, 'wb') as file:
+        pickle.dump(DATA, file)
+
+
+def load_data(file_name):
+    with open(file_name, 'rb') as file:
+        return pickle.load(file)
+
+
 def run_dns(base_ip):
     request_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     request_sock.bind((ADDRESS, DNS_PORT))
@@ -277,26 +291,39 @@ def run_dns(base_ip):
         if have_cached_records(name, type):
             LOG('CACHED')
             process_known_request(request_sock, address, id, name, type, request)
-        else:
+        elif base_ip is not None:
             LOG('NOT CACHED')
             process_unknown_request(dns_sock, base_ip, request_sock, request, address)
+        else:
+            LOG('UNKNOWN REQUEST')
 
         LOG('\nRESPONSE SENT')
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Caching DNS server')
-    parser.add_argument('base_server_ip', metavar='IP', help='IP address of base DNS server')
+    parser.add_argument('-i', '--base_server_addr', default=None,
+                        help='address address of base DNS server (server runs in cache-only mode if not set)')
+    parser.add_argument('-f', '--file_name', default='./cache.txt', help='file to save cache')
     parser.add_argument('-l', '--logging_on', action='store_true', help='enables console logging')
 
     args = parser.parse_args()
     if args.logging_on:
         LOG = print
-    check_command = 'ping -n 1 ' + args.base_server_ip + ' > nul'
-    if os.system(check_command) != 0:
-        parser.error(f'base server (by IP: {args.base_server_ip}) is unreachable')
 
-    threading.Thread(target=run_dns, args=(args.base_server_ip,), daemon=True).start()
-    print(f'\nRunning server on IP: {args.base_server_ip}')
+    DATA = load_data(args.file_name)
+
+    if args.base_server_addr is not None:
+        check_command = 'ping -n 1 ' + args.base_server_addr + ' > nul'
+        if os.system(check_command) != 0:
+            parser.error(f'base server ({args.base_server_addr}) is unreachable')
+
+    threading.Thread(target=run_dns, args=(args.base_server_addr,), daemon=True).start()
+    if args.base_server_addr is not None:
+        print(f'\nRunning server on {args.base_server_addr}')
+    else:
+        print('\nRunning server (cache-only mode)')
     print('Press Enter to exit')
     _ = input()
+
+    save_data(args.file_name)
