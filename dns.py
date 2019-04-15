@@ -1,4 +1,5 @@
 import socket
+import time
 
 BYTE_ORDER = 'big'
 
@@ -6,8 +7,8 @@ PORT = 37000
 ADDRESS = ''
 
 DNS_PORT = 53
-# DNS_ADDRESS = '8.8.8.8'
-DNS_ADDRESS = 'ns1.e1.ru'
+DNS_ADDRESS = '8.8.8.8'
+# DNS_ADDRESS = 'ns1.e1.ru'
 
 SIZE = 512
 
@@ -66,7 +67,6 @@ def parse_name_part(name):
 
 def parse_name(data, name_start):
     name = data[name_start:]
-    a = name[0]
     current = 0
     parts = []
 
@@ -101,7 +101,6 @@ def parse_answer_record(data, record_start):
     data_start = data_length_start + 2
 
     type = parse_type(data[type_start:])
-    a = data[type_start:]
 
     if type not in DATA:
         print('unknown type', get_type_name(type))
@@ -131,6 +130,7 @@ def create_response(id, name, type):
 
 
 def add_record_to_cache(type, name, ttl, data):
+    time.time() # TODO
     if name not in DATA[type]:
         DATA[type][name] = []
     DATA[type][name].append((ttl, data))
@@ -144,7 +144,7 @@ def cache_response(response):
         if type not in DATA:
             return
         add_record_to_cache(type, name, ttl, data)
-        print('CACHED', name, get_type_name(type), ttl, data)
+        print('CACHED', name, get_type_name(type), ttl, len(data), data)
 
 
 def process_known_request(request_sock, address, id, name, type):
