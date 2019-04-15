@@ -286,8 +286,8 @@ def run_dns(base_ip):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Caching DNS server')
-    parser.add_argument('base_server_ip', metavar='IP', help='ip address of base DNS server')
-    parser.add_argument('-l', '--logging_on', action='store_true')
+    parser.add_argument('base_server_ip', metavar='IP', help='IP address of base DNS server')
+    parser.add_argument('-l', '--logging_on', action='store_true', help='enables console logging')
 
     args = parser.parse_args()
     if args.logging_on:
