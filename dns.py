@@ -346,6 +346,18 @@ def load_data(file_name):
         return pickle.load(file)
 
 
+def log_cahce():
+    LOG('\nCache:')
+    for type in DATA:
+        LOG(' ' + get_type_name(type) + ':')
+        for name in DATA[type]:
+            LOG('  ' + name + ':')
+            for time in DATA[type][name]:
+                LOG('   ' + str(time) + ':')
+                for record in DATA[type][name][time]:
+                    LOG('    ' + serialize_record_data(type, record))
+
+
 def run_dns(base_ip):
     request_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     request_sock.bind((ADDRESS, DNS_PORT))
@@ -388,8 +400,8 @@ if __name__ == '__main__':
     if args.logging_on:
         LOG = print
 
-    # DATA = load_data(args.file_name)
-    print(DATA)
+    DATA = load_data(args.file_name)
+    log_cahce()
 
     if args.base_server_addr is not None:
         check_command = 'ping -n 1 ' + args.base_server_addr + ' > nul'
