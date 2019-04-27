@@ -364,34 +364,35 @@ def run_dns(base_ip):
 
     dns_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     dns_sock.bind((ADDRESS, PORT))
+    dns_sock.settimeout(3)
 
     while True:
-        LOG('\nWAITING FOR REQUEST')
+        try:
+            LOG('\nWAITING FOR REQUEST')
 
-        request, address = request_sock.recvfrom(SIZE)
-        LOG('\nGOT REQUEST')
+            request, address = request_sock.recvfrom(SIZE)
+            LOG('\nGOT REQUEST')
 
-        id, name, type, _ = parse_request(request)
+            id, name, type, _ = parse_request(request)
 
-        if type not in DATA:
-            LOG('UNKNOWN TYPE', type)
-            continue
+            if type not in DATA:
+                LOG('UNKNOWN TYPE', type)
+                continue
 
-        if have_cached_records(name, type):
-            LOG('CACHED')
-            process_known_request(request_sock, address, id, name, type, request)
+            if have_cached_records(name, type):
+                LOG('CACHED')
+                process_known_request(request_sock, address, id, name, type, request)
+            else:
+                LOG('NOT CACHED')
+                process_unknown_request(dns_sock, base_ip, request_sock, request, address)
             LOG('\nRESPONSE SENT')
-        elif base_ip is not None:
-            LOG('NOT CACHED')
-            process_unknown_request(dns_sock, base_ip, request_sock, request, address)
-            LOG('\nRESPONSE SENT')
-        else:
-            LOG('UNKNOWN REQUEST')
+        except Exception as e:
+            LOG('Error:', e.__class__.__name__)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Caching DNS server')
-    parser.add_argument('-i', '--base_server_addr', default=None,
+    parser.add_argument('-i', '--base_server_addr', default='8.8.8.8',
                         help='address address of base DNS server (server runs in cache-only mode if not set)')
     parser.add_argument('-f', '--file_name', default='./cache.txt', help='file to save cache')
     parser.add_argument('-l', '--logging_on', action='store_true', help='enables console logging')
@@ -403,17 +404,10 @@ if __name__ == '__main__':
     DATA = load_data(args.file_name)
     log_cahce()
 
-    if args.base_server_addr is not None:
-        check_command = 'ping -n 1 ' + args.base_server_addr + ' > nul'
-        if os.system(check_command) != 0:
-            parser.error(f'base server ({args.base_server_addr}) is unreachable')
-
-    threading.Thread(target=run_dns, args=(args.base_server_addr,), daemon=True).start()
-    if args.base_server_addr is not None:
+    try:
+        threading.Thread(target=run_dns, args=(args.base_server_addr,), daemon=True).start()
         print(f'\nRunning server on {args.base_server_addr}')
-    else:
-        print('\nRunning server (cache-only mode)')
-    print('Press Enter to exit')
-    _ = input()
-
-    save_data(args.file_name)
+        print('Press Enter to exit')
+        _ = input()
+    finally:
+        save_data(args.file_name)
