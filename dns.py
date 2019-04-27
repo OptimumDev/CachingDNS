@@ -16,15 +16,24 @@ SIZE = 512
 
 A = b'\x00\x01'
 NS = b'\x00\x02'
+AAAA = b'\x00\x1c'
+PTR = b'\x00\x0c'
+SOA = b'\x00\x06'
 
 DATA = {
     A: {},
-    NS: {}
+    NS: {},
+    AAAA: {},
+    PTR: {},
+    SOA: {}
 }
 
 TYPE_NAMES = {
     A: 'A',
-    NS: 'NS'
+    NS: 'NS',
+    AAAA: 'AAAA',
+    PTR: 'PTR',
+    SOA: 'SOA'
 }
 
 
@@ -41,6 +50,15 @@ def get_type_name(type):
 
 def parse_ip(ip_bytes):
     return '.'.join([str(num) for num in ip_bytes])
+
+
+def parse_ip6(ip_bytes):
+    result = ''
+    for i in range(len(ip_bytes)):
+        result += str(ip_bytes[i: i+1].hex())
+        if i % 2 == 1 and i < len(ip_bytes) - 1:
+            result += ':'
+    return result
 
 
 def read_bits(byte, count):
@@ -107,6 +125,58 @@ def parse_name(data, name_start):
     return result_name, name_start + current + 1
 
 
+def parse_soa_data(data, start):
+    mname, rname_start = parse_name(data, start)
+    rname, serial_start = parse_name(data, rname_start)
+
+    refresh_start = serial_start + 4
+    retry_start = refresh_start + 4
+    expire_start = retry_start + 4
+    minimum_start = expire_start + 4
+
+    serial = data[serial_start: refresh_start]
+    refresh = data[refresh_start: retry_start]
+    retry = data[retry_start: expire_start]
+    expire = data[expire_start: minimum_start]
+    minimum = data[minimum_start: minimum_start + 4]
+
+    return mname, rname, serial, refresh, retry, expire, minimum
+
+
+def encode_soa_data(data):
+    result = b''
+    for i in range(len(data)):
+        if i < 2:
+            result += encode_name(data[i])
+        else:
+            result += data[i]
+    return result
+
+
+def serialize_soa_data(data):
+    result = '('
+    for i in range(len(data)):
+        if i < 2:
+            result += data[i]
+        else:
+            result += str(int.from_bytes(data[i], BYTE_ORDER))
+        result += ' '
+    return result[:-1] + ')'
+
+
+def serialize_record_data(type, data):
+    if type == A:
+        return parse_ip(data)
+    elif type == AAAA:
+        return parse_ip6(data)
+    elif type in [NS, PTR]:
+        return data
+    elif type == SOA:
+        return serialize_soa_data(data)
+    else:
+        return data
+
+
 def encode_name(name):
     result = b''
     parts = name.split('.')
@@ -143,8 +213,10 @@ def parse_answer_record(data, record_start):
     record_data_length = int.from_bytes(data[data_length_start: data_start], BYTE_ORDER)
     record_data = data[data_start: data_start + record_data_length]
 
-    if type == NS:
+    if type in [NS, PTR]:
         record_data = parse_name(data, data_start)[0]
+    elif type == SOA:
+        record_data = parse_soa_data(data, data_start)
 
     return name, type, ttl, record_data, data_start + record_data_length
 
@@ -154,10 +226,15 @@ def encode_record(record, expire_time, type, name):
     cls = (1).to_bytes(2, BYTE_ORDER)
     time_left = int(expire_time - time.time())
     ttl = time_left.to_bytes(4, BYTE_ORDER)
-    rdata = record if type == A else encode_name(record)
+    if type in [A, AAAA]:
+        rdata = record
+    elif type in [NS, PTR]:
+        rdata = encode_name(record)
+    else:
+        rdata = encode_soa_data(record)
     rdlength = len(rdata).to_bytes(2, BYTE_ORDER)
 
-    LOG('record:', name, get_type_name(type), time_left, len(rdata), record if type == NS else parse_ip(rdata))
+    LOG('record:', name, get_type_name(type), time_left, serialize_record_data(type, record))
     return encoded_name + type + cls + ttl + rdlength + rdata
 
 
@@ -214,7 +291,7 @@ def add_record_to_cache(type, name, ttl, data):
     if expire_time not in DATA[type][name]:
         DATA[type][name][expire_time] = []
     DATA[type][name][expire_time].append(data)
-    LOG('cached:', name, get_type_name(type), ttl, len(data), data if type == NS else parse_ip(data))
+    LOG('cached:', name, get_type_name(type), ttl, serialize_record_data(type, data))
 
 
 def cache_response(response):
@@ -311,7 +388,8 @@ if __name__ == '__main__':
     if args.logging_on:
         LOG = print
 
-    DATA = load_data(args.file_name)
+    # DATA = load_data(args.file_name)
+    print(DATA)
 
     if args.base_server_addr is not None:
         check_command = 'ping -n 1 ' + args.base_server_addr + ' > nul'
