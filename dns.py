@@ -1,5 +1,4 @@
 import argparse
-import os
 import socket
 import time
 import threading
@@ -61,16 +60,6 @@ def parse_ip6(ip_bytes):
     return result
 
 
-def read_bits(byte, count):
-    return ''.join([str(ord(byte) & (1 << bit)) for bit in range(1, count + 1)])
-
-
-def str_bits_to_bytes(str_bits):
-    str_bits = str_bits.replace(' ', '')
-    length = len(str_bits) // 8
-    return int(str_bits, 2).to_bytes(length, BYTE_ORDER)
-
-
 def parse_type(type, type_start):
     return type[type_start: type_start + 2]
 
@@ -78,22 +67,8 @@ def parse_type(type, type_start):
 def get_flags(request):
     qr = int('10000000', 2)
     opcode = request[2] & int('01111000', 2)
-    aa = int('00000100', 2)
-    tc = rd = ra = z = rcode = 0
+    aa = tc = rd = ra = z = rcode = 0
     return (qr + opcode + aa + tc + rd).to_bytes(1, BYTE_ORDER) + (ra + z + rcode).to_bytes(1, BYTE_ORDER)
-
-
-def parse_flags(flags):
-    qr = '1'
-    opcode = read_bits(flags[:1], 4)
-    aa = '1'
-    tc = '0'
-    rd = '0'
-    ra = '0'
-    z = '000'
-    rcode = '0000'
-
-    return str_bits_to_bytes(qr + opcode + aa + tc + rd) + str_bits_to_bytes(ra + z + rcode)
 
 
 def parse_name_part(name):
@@ -243,7 +218,7 @@ def get_query_record(name, type):
     return encoded_name + type + (1).to_bytes(2, BYTE_ORDER)
 
 
-def get_cached_recods(name, type):
+def get_cached_records(name, type):
     result = []
     for time in DATA[type][name]:
         for record in DATA[type][name][time]:
@@ -252,7 +227,7 @@ def get_cached_recods(name, type):
 
 
 def get_answer_records(name, type):
-    records = get_cached_recods(name, type)
+    records = get_cached_records(name, type)
     result = b''
 
     LOG('records:', len(records), 0, 0)
@@ -277,7 +252,7 @@ def create_response(id, name, type, request):
     flasgs = get_flags(request)
     records = get_answer_records(name, type)
     qdcount = (1).to_bytes(2, BYTE_ORDER)
-    ancount = len(get_cached_recods(name, type)).to_bytes(2, BYTE_ORDER)
+    ancount = len(get_cached_records(name, type)).to_bytes(2, BYTE_ORDER)
     nscount = arcount = (0).to_bytes(2, BYTE_ORDER)
     query = get_query_record(name, type)
 
